@@ -1,0 +1,17 @@
+version: 0.2
+phases:
+  install:
+   runtime-version:
+    nodejs: 18
+   commands:
+    - echo "Installing Dependencies..."
+    - npm install
+    - npm install -g @angular/cli@15.2.4
+  build:
+   commands:
+    - echo "Building Angular Project..."
+    - ng build 
+  post_build:
+   commands:
+    - echo "Updating Files in the S3 Buckets..."
+    - aws s3 sync dist/angular-app/ s3://angular-app-codebuild --delete
