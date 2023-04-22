@@ -10,7 +10,7 @@ phases:
   build:
    commands:
     - echo "Building Angular Project..."
-    - ng build 
+    - ng build --allowed-common-js-dependencies
   post_build:
    commands:
     - echo "Updating Files in the S3 Buckets..."
