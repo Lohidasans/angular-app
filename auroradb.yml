@@ -1,0 +1,113 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Lambda for creating tables in Aurora DB cluster
+
+Resources:
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-Lambda-Role"
+      Description: An execution role for a Lambda function launched by CloudFormation
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/exc-query-fn-aurora0"
+      RetentionInDays: 30
+
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Creates a new table in an existing Aurora DB cluster
+      FunctionName: exc-query-fn-aurora0
+      Handler: index.handler
+      MemorySize: 128
+      Runtime: nodejs14.x
+      Role: !GetAtt LambdaRole.Arn
+      Timeout: 240
+      VpcConfig:
+        SecurityGroupIds:
+          - sg-0602425b8588d05e5
+        SubnetIds:
+          - subnet-016ebe095cd001dfd
+          - subnet-0e5c5be973acd6250
+      Environment:
+        Variables:
+          EndpointURL: !GetAtt RDSDBCluster.Endpoint.Address
+          DBUsername: admin
+          DBPassword: pass1234
+          DBName: demomyauroradb0
+          DBPort: 3306
+      Code:
+        S3Bucket: shure-devops-poc
+        S3Key: clinodetablequeryexe0.zip
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnets the database belongs to
+      SubnetIds:
+        - subnet-016ebe095cd001dfd
+        - subnet-0902cfa561a81755f
+
+  RDSDBCluster:
+    Type: AWS::RDS::DBCluster
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Delete
+    Properties:
+      Engine: aurora
+      EngineMode: serverless
+      DatabaseName: demomyauroradb0
+      MasterUsername: admin
+      MasterUserPassword: pass1234
+      DBClusterIdentifier: !Join ["-", ["demomyauroradb0", !Ref "AWS::Region"]]
+      VpcSecurityGroupIds:
+        - sg-0602425b8588d05e5
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-db-cluster"
+
+  CustomResourceInvokeLambda:
+    Type: Custom::Resource
+    Properties:
+      ServiceToken: !GetAtt LambdaFunction.Arn
+      FunctionName: !Ref LambdaFunction
+      Payload: |
+        {
+          "query": [
+            {
+              "executeQuery": "CREATE TABLE IF NOT EXISTS shure_pdd_cloud_organizations_table_dev (orgId VARCHAR(255) NOT NULL,userId VARCHAR(255) NOT NULL,role VARCHAR(255) NOT NULL,description VARCHAR(255),createdOn TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updatedOn TIMESTAMP DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY (orgId))"
+            }
+          ]
+        }
+
+  LambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref LambdaFunction
+      Action: lambda:InvokeFunction
+      Principal: cloudformation.amazonaws.com
+      SourceArn: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*"
+
+  InvokeLambdaFunction:
+    Type: Custom::InvokeLambdaFunction
+    DependsOn: CustomResourceInvokeLambda
+    Properties:
+      ServiceToken: !GetAtt LambdaFunction.Arn
+      FunctionName: !Ref LambdaFunction
+
+Outputs:
+  StackOutput:
+    Value: "Stack created successfully"
